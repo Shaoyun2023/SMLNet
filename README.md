@@ -14,3 +14,34 @@ We propose a novel SPD Attention Module (SPDAM) that dynamically weights cross-m
 ● **Superior Performance & Efficiency**  
 Extensive experiments show SMLNet outperforms state-of-the-art methods in fusion quality (e.g., EN, VIF) and computational efficiency, with proven gains in downstream tasks like object detection.
 
+🖥️Environment
+----
+python==3.12.7
+
+pytorch==2.5.1
+
+pytorch-cuda==12.4
+
+scipy==1.13.1
+
+numpy==1.26.4
+
+pillow==10.4.0
+
+tqdm==4.66.5
+
+⚙️Training
+----
+```bash
+python train_autoencoder.py
+```
+
+✔️Testing
+----
+```bash
+python test.py
+```
+
+⬇️Model Download
+----
+The vgg16 model can be found in https://pan.baidu.com/s/14YYYrDZ1RM3yqFbYNnbQbw, and the password is: usd6
