@@ -1,7 +1,8 @@
 🧩🚀SMLNet: A SPD Manifold Learning Network for Infrared and Visible Image Fusion
 ====
 Accetped by 
-[IJCV 2026]
+[IJCV 2025]
+🔗"(https://doi.org/10.1007/s11263-025-02578-1)"
 
 🔍Highlights
 ---
@@ -40,6 +41,20 @@ python train_autoencoder.py
 ----
 ```bash
 python test.py
+```
+
+📖Citation
+----
+If you are interested in our work, please cite it in the following format:
+```bash
+@article{kang2025smlnet,
+  title={SMLNet: A SPD Manifold Learning Network for Infrared and Visible Image Fusion},
+  author={Kang, Huan and Li, Hui and Xu, Tianyang and Wu, Xiao-Jun and Wang, Rui and Cheng, Chunyang and Kittler, Josef},
+  journal={International Journal of Computer Vision},
+  pages={1--22},
+  year={2025},
+  publisher={Springer}
+}
 ```
 
 ⬇️Model Download
