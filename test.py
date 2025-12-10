@@ -1,246 +1,380 @@
-
-
 import os
 import torch
 from torch.autograd import Variable
-from net import SMLNet,SPDconv
+from net import SMLNet, SPDconv
 import utils
 from args_fusion import args
 import numpy as np
-# from scipy.misc import imread, imsave, imresize
 import torchvision.transforms as transforms
 import random
 import matplotlib.pyplot as plt
+from PIL import Image
 
-import torchvision
-from ptflops import get_model_complexity_info
 
-from thop import profile
+def clamp(value, min=0., max=1.0):
+    """
+    将像素值强制约束在[0,1], 以免出现异常斑点
+    :param value:
+    :param min:
+    :param max:
+    :return:
+    """
+    return torch.clamp(value, min=min, max=max)
+
+
+def RGB2YCrCb(rgb_image):
+    """
+    将RGB格式转换为YCrCb格式
+
+    :param rgb_image: RGB格式的图像数据
+    :return: Y, Cr, Cb
+    """
+    R = rgb_image[0:1]
+    G = rgb_image[1:2]
+    B = rgb_image[2:3]
+    Y = 0.299 * R + 0.587 * G + 0.114 * B
+    Cr = (R - Y) * 0.713 + 0.5
+    Cb = (B - Y) * 0.564 + 0.5
+
+    # Y = clamp(Y)
+    # Cr = clamp(Cr)
+    # Cb = clamp(Cb)
+
+
+
+    # image = torch.sum(Cb, dim=0, keepdim=True)
+    #
+    # image = image.squeeze().detach().cpu().numpy()
+    #
+    # image = (image - image.min()) / (image.max() - image.min())
+    # plt.imshow(image, cmap='gray')
+    # plt.axis('off')
+    # plt.show()
+
+    return Y, Cb, Cr
+
+
+def YCrCb2RGB(Y, Cb, Cr):
+    """
+    将YcrCb格式转换为RGB格式
+
+    :param Y:
+    :param Cb:
+    :param Cr:
+    :return:
+    """
+    ycrcb = torch.cat([Y, Cr, Cb], dim=0)
+    C, W, H = ycrcb.shape
+    im_flat = ycrcb.reshape(3, -1).transpose(0, 1)
+    mat = torch.tensor(
+        [[1.0, 1.0, 1.0], [1.403, -0.714, 0.0], [0.0, -0.344, 1.773]]
+    ).to(Y.device)
+    bias = torch.tensor([0.0 / 255, -0.5, -0.5]).to(Y.device)
+    temp = (im_flat + bias).mm(mat)
+    out = temp.transpose(0, 1).reshape(C, W, H)
+    out = (out - out.min()) / (out.max() - out.min())
+    out = clamp(out)
+    return out
+
 
 def load_model1(path, deepsupervision):
-	input_nc = 1
-	output_nc = 1
-	nb_filter=[16, 64, 32, 16]
+    input_nc = 1
+    output_nc = 1
+    nb_filter = [16, 64, 32, 16]
 
-	nest_model = SMLNet(nb_filter, input_nc, output_nc, deepsupervision)
+    nest_model = SMLNet(nb_filter, input_nc, output_nc, deepsupervision)
 
+    nest_model.load_state_dict(torch.load(path))
 
-	nest_model.load_state_dict(torch.load(path))
+    para = sum([np.prod(list(p.size())) for p in nest_model.parameters()])
+    type_size = 4
+    print('Model {} : params: {:4f}M'.format(nest_model._get_name(), para * type_size / 1000 / 1000))
 
-	para = sum([np.prod(list(p.size())) for p in nest_model.parameters()])
-	type_size = 4
-	print('Model {} : params: {:4f}M'.format(nest_model._get_name(), para * type_size / 1000 / 1000))
+    nest_model.eval()
+    nest_model.to(args.device)
 
-	nest_model.eval()
-	nest_model.to(args.device)
+    return nest_model
 
-
-	return nest_model
 
 def load_model2(path, deepsupervision):
-	input_nc = 1
-	output_nc = 1
-	nb_filter = [64, 112, 160, 208, 256]
+    input_nc = 1
+    output_nc = 1
+    nb_filter = [64, 112, 160, 208, 256]
 
-	SPD_model = SPDconv(in_chans=input_nc, out_chans=output_nc)
+    SPD_model = SPDconv(in_chans=input_nc, out_chans=output_nc)
 
+    SPD_model.load_state_dict(torch.load(path), False)
 
+    para = sum([np.prod(list(p.size())) for p in SPD_model.parameters()])
+    type_size = 4
+    print('Model {} : params: {:4f}M'.format(SPD_model._get_name(), para * type_size / 1000 / 1000))
 
-
-	SPD_model.load_state_dict(torch.load(path), False)
-
-	para = sum([np.prod(list(p.size())) for p in SPD_model.parameters()])
-	type_size = 4
-	print('Model {} : params: {:4f}M'.format(SPD_model._get_name(), para * type_size / 1000 / 1000))
-
-	SPD_model.eval()
-	# SPD_model.cuda()
-
-	return SPD_model
+    SPD_model.eval()
+    return SPD_model
 
 
 def run_demo(nest_model, SPD_model, infrared_path, visible_path, output_path_root, index, f_type):
-	img_ir, h, w, c = utils.get_test_image1(infrared_path)
-	img_vi, h, w, c = utils.get_test_image1(visible_path)
+    # 加载红外和可见光图像
+    img_ir, h, w, c, viimage = utils.get_test_image1(infrared_path)
+    img_vi, h, w, c, viimage = utils.get_test_image1(visible_path)
+
+
+    # image = torch.sum(viimage, dim=0, keepdim=True)
+    # print(viimage.shape)
+    # image = viimage.squeeze().detach().cpu().numpy()
+    #
+    # image = (image - image.min()) / (image.max() - image.min())
+    # plt.imshow(image, cmap='gray')
+    # plt.axis('off')
+    # plt.show()
+
+
+    # 将viimage从numpy数组转换为torch张量
+    # viimage的形状是(480, 640, 3)，需要转换为(3, 480, 640)
+    if viimage is not None and len(viimage.shape) == 3:
+        # 转换为torch张量并调整维度顺序
+
+        # image = torch.sum(viimage, dim=0, keepdim=True)
+        # image = viimage.squeeze().detach().cpu().numpy()
+        #
+        # image = (image - image.min()) / (image.max() - image.min())
+        # plt.imshow(image, cmap='gray')
+        # plt.axis('off')
+        # plt.show()
+
+        viimage_tensor = torch.from_numpy(viimage).permute(2, 0, 1)
 
 
 
-	if c is 0:
-		if args.cuda:
-			img_ir = img_ir.to(args.device)
-			img_vi = img_vi.to(args.device)
-		img_ir = Variable(img_ir, requires_grad=False)
-		img_vi = Variable(img_vi, requires_grad=False)
+        if args.cuda:
+            viimage_tensor = viimage_tensor.to(args.device)
 
-		x11 = SPD_model.spdconv(img_ir.cpu(), img_vi.cpu())[0]
-		x12 = SPD_model.spdconv(img_ir.cpu(), img_vi.cpu())[1]
-
-		x11 = SPD_model.spdconv(x11, x12)[0]
-		x12 = SPD_model.spdconv(x11, x12)[1]
-
-		x11 = SPD_model.spdconv(x11, x12)[0]
-		x12 = SPD_model.spdconv(x11, x12)[1]
-		#
-		# x11 = x11.to(args.device)
-		# x12 = x12.to(args.device)
-
-		bbb = nest_model.encodertrain(img_vi, img_ir)[0]
-
-		img_fusion = bbb
+        # 提取可见光图像的Cb和Cr通道
+        Y_vi, Cb_vi, Cr_vi = RGB2YCrCb(viimage_tensor)
 
 
-	else:
-		img_fusion_blocks = []
-		img_fusion_list = []
-		for i in range(c):
-			img_vi_temp = img_vi[i]
-			img_ir_temp = img_ir[i]
-			if args.cuda:
-				img_vi_temp = img_vi_temp.to(args.device)
-				img_ir_temp = img_ir_temp.to(args.device)
-			img_vi_temp = Variable(img_vi_temp, requires_grad=False)
-			img_ir_temp = Variable(img_ir_temp, requires_grad=False)
+        # image = torch.sum(Y_vi, dim=0, keepdim=True)
+        # image = image.squeeze().detach().cpu().numpy()
+        #
+        # image = (image - image.min()) / (image.max() - image.min())
+        # plt.imshow(image)
+        # plt.axis('off')
+        # plt.show()
 
 
-			spdd = SPD_model.spdconv(img_ir_temp.cpu(), img_vi_temp.cpu())
+    # 如果是灰度图像（单通道）
+    if c == 0:
+        if args.cuda:
+            img_ir = img_ir.to(args.device)
+            img_vi = img_vi.to(args.device)
+        img_ir = Variable(img_ir, requires_grad=False)
+        img_vi = Variable(img_vi, requires_grad=False)
+
+        x11 = SPD_model.spdconv(img_ir.cpu(), img_vi.cpu())[0]
+        x12 = SPD_model.spdconv(img_ir.cpu(), img_vi.cpu())[1]
+
+        x11 = SPD_model.spdconv(x11, x12)[0]
+        x12 = SPD_model.spdconv(x11, x12)[1]
+
+        x11 = SPD_model.spdconv(x11, x12)[0]
+        x12 = SPD_model.spdconv(x11, x12)[1]
+
+        bbb = nest_model.encodertrain(img_vi, img_ir)[0]
+        img_fusion = bbb
+
+        # 保存融合结果
+        if index < 10:
+            file_name = '0' + str(index) + '.png'
+        else:
+            file_name = str(index) + '.png'
+        output_path = output_path_root + file_name
+        utils.save_image_test(img_fusion, output_path)
 
 
-			x11 = spdd[0]
-			x12 = spdd[1]
+    # 如果是彩色图像（三通道）
+    else:
+        img_fusion_blocks = []
+
+        # 处理每个通道
+        for i in range(c):
+            img_vi_temp = img_vi[i]
+            img_ir_temp = img_ir[i]
+
+            if args.cuda:
+                img_vi_temp = img_vi_temp.to(args.device)
+                img_ir_temp = img_ir_temp.to(args.device)
+
+            img_vi_temp = Variable(img_vi_temp, requires_grad=False)
+            img_ir_temp = Variable(img_ir_temp, requires_grad=False)
+
+            spdd = SPD_model.spdconv(img_ir_temp.cpu(), img_vi_temp.cpu())
+            x11 = spdd[0]
+            x12 = spdd[1]
+
+            x11 = x11.to(args.device)
+            x12 = x12.to(args.device)
+
+            bbb = nest_model.encodertrain(x11, x12)[0]
+            img_fusion_blocks.append(bbb)
+
+        # 根据图像尺寸选择重组方式
+        if h == 256 and w == 256:
+            img_fusion_list = utils.recons_fusion_images11(img_fusion_blocks, h, w)
+        elif 256 < h <= 512 and 256 < w <= 512:
+            img_fusion_list = utils.recons_fusion_images1(img_fusion_blocks, h, w)
+        elif h == 576 and w == 768:
+            img_fusion_list = utils.recons_fusion_images576768(img_fusion_blocks, h, w)
+        elif h == 450 and w == 620:
+            img_fusion_list = utils.recons_fusion_images450620(img_fusion_blocks, h, w)
+        elif 512 < h <= 768 and 512 < w <= 768:
+            img_fusion_list = utils.recons_fusion_images2(img_fusion_blocks, h, w)
+        elif 512 < h < 768 and 768 < w <= 1024:
+            img_fusion_list = utils.recons_fusion_images3(img_fusion_blocks, h, w)
+        elif 256 < h < 512 and 512 < w < 768 and h != 450 and w != 620:
+            img_fusion_list = utils.recons_fusion_images4(img_fusion_blocks, h, w)
+        elif 768 <= h <= 1024 and 1024 <= w <= 1280:
+            img_fusion_list = utils.recons_fusion_images5(img_fusion_blocks, h, w)
+        elif 0 < h < 256 and 256 < w < 512:
+            img_fusion_list = utils.recons_fusion_images6(img_fusion_blocks, h, w)
+        elif 0 < h < 256 and 512 < w < 768:
+            img_fusion_list = utils.recons_fusion_images7(img_fusion_blocks, h, w)
+        elif h == 256 and 512 < w < 768:
+            img_fusion_list = utils.recons_fusion_images8(img_fusion_blocks, h, w)
+        else:
+            # 默认处理方式
+            img_fusion_list = img_fusion_blocks
+
+        # 将融合后的Y通道与可见光的Cb、Cr通道结合
+        output_count = 0
+        for img_fusion in img_fusion_list:
+            # img_fusion是融合后的Y通道
+            Y_fused = img_fusion
 
 
-			x11 = x11.to(args.device)
-			x12 = x12.to(args.device)
 
-			bbb = nest_model.encodertrain(x11, x12)[0]
+            # 调整尺寸匹配
+            if Y_fused.shape[-2:] != Cb_vi.shape[-2:]:
+                # 如果需要调整尺寸
+                Y_fused_resized = torch.nn.functional.interpolate(
+                    Y_fused.unsqueeze(0),
+                    size=(h, w),
+                    mode='bilinear',
+                    align_corners=False
+                ).squeeze(0)
+            else:
+                Y_fused_resized = Y_fused
+
+            # image = torch.sum(Y_fused_resized, dim=0, keepdim=True)
 
 
-			# x_min = torch.min(bbb)
-			# x_max = torch.max(bbb)
-			# bbb = (bbb - x_min) / (x_max - x_min) * 255
+            # 将Y通道与Cb、Cr通道结合，转换回RGB
+            rgb_fused_image = YCrCb2RGB(Y_fused_resized, Cb_vi, Cr_vi)
 
 
-			# bbb = -bbb
+            # image = torch.sum(rgb_fused_image, dim=0, keepdim=True)
+            #
+            # image = image.squeeze().detach().cpu().numpy()
+            #
+            # image = (image - image.min()) / (image.max() - image.min())
+            # plt.imshow(image, cmap='gray')
+            # plt.axis('off')
+            # plt.show()
 
-			# x_min2 = torch.min(bbb)
-			# x_max2 = torch.max(bbb)
-			# x = (bbb- x_min2) / (x_max2 - x_min2) * 255
-			# img_fusion = ((bbb / 2) + 0.5) * 255
-			img_fusion_blocks.append(bbb)
-		print(h, "h")
-		print(w, "w")
-		if h == 256 and w == 256:
-			img_fusion_list = utils.recons_fusion_images11(img_fusion_blocks, h, w)
-		if 256 < h <= 512 and 256 < w <= 512:
-			img_fusion_list = utils.recons_fusion_images1(img_fusion_blocks, h, w)
+            # 保存图像
+            if index < 10:
+                file_name = '0' + str(index) + '.png'
+            else:
+                file_name = str(index) + '.png'
+            output_path = output_path_root + file_name
+            output_count += 1
 
-		if h== 576 and w == 768:
-			img_fusion_list = utils.recons_fusion_images576768(img_fusion_blocks, h, w)
 
-		if h == 450  and w == 620:
-			img_fusion_list = utils.recons_fusion_images450620(img_fusion_blocks, h, w)
 
-		if 512 < h <= 768 and 512 < w <= 768:
-			img_fusion_list = utils.recons_fusion_images2(img_fusion_blocks, h, w)
-		if 512 < h < 768 and 768 < w <= 1024:
-			img_fusion_list = utils.recons_fusion_images3(img_fusion_blocks, h, w)
+            def tensor_to_pil(tensor, mode='RGB'):
+                """
+                将torch张量转换为PIL图像
+                Args:
+                    tensor: torch.Tensor, 形状应为 [C, H, W]
+                    mode: PIL图像模式，如 'RGB', 'L' 等
+                Returns:
+                    PIL.Image对象
+                """
+                # 确保张量在CPU上且是float类型
+                tensor = tensor.cpu().detach()
 
-		if 256 < h < 512 and 512 < w < 768 and h!= 450 and w != 620:
-			img_fusion_list = utils.recons_fusion_images4(img_fusion_blocks, h, w)
-		if 768 <= h <= 1024 and 1024 <= w <= 1280:
-			img_fusion_list = utils.recons_fusion_images5(img_fusion_blocks, h, w)
-		if 0 < h < 256 and 256 < w < 512:
-			img_fusion_list = utils.recons_fusion_images6(img_fusion_blocks, h, w)
-		if 0 < h < 256 and 512 < w < 768:
-			img_fusion_list = utils.recons_fusion_images7(img_fusion_blocks, h, w)
-		if h == 256 and 512 < w < 768:
-			img_fusion_list = utils.recons_fusion_images8(img_fusion_blocks, h, w)
-	# img_fusion_list = utils.recons_fusion_images(img_fusion_blocks, h, w)
-	# image = (img_fusion_list[0]).squeeze().detach().cpu().numpy()
-	# image = (image - image.min()) / (image.max() - image.min())
+                # 检查张量形状
+                if tensor.dim() != 3:
+                    raise ValueError(f"输入张量应为3维 [C, H, W]，但得到的是 {tensor.shape}")
 
-	# plt.imshow((img_fusion_list[0]).cpu().squeeze(), cmap='jet')
-	# plt.axis('off')
-	#
-	# plt.savefig('figure/1.png', bbox_inches='tight', pad_inches=0.0)
-	#
-	# plt.show()
+                # 如果是Byte类型（0-255），转换为float（0-1）
+                if tensor.dtype == torch.uint8:
+                    tensor = tensor.float() / 255.0
 
-	output_count = 0
-	for img_fusion in img_fusion_list:
+                # 如果张量值范围不是0-1，进行归一化或clamp
+                if tensor.min() < 0 or tensor.max() > 1:
+                    # 方法1：clamp到0-1范围
+                    tensor = tensor.clamp(0, 1)
+                    # 或者方法2：归一化到0-1范围
+                    # tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
 
-		# image = img_fusion.squeeze().detach().cpu().numpy()
-		#
-		# image = (image - image.min()) / (image.max() - image.min())
-		# plt.imshow(image, cmap='jet')
-		# # plt.imshow(image, cmap='gray')
-		# plt.axis('off')
-		# plt.show()
+                # 转换为numpy数组，并调整维度为 [H, W, C]
+                # 注意：PIL需要 [H, W, C] 格式
+                if tensor.shape[0] == 3:  # RGB图像
+                    # 从 [C, H, W] 转换为 [H, W, C]
+                    numpy_array = tensor.permute(1, 2, 0).numpy()
+                else:
+                    # 对于单通道图像
+                    numpy_array = tensor.squeeze(0).numpy()
 
-		# print(img_fusion)
-		# x_min2 = torch.min(img_fusion)
-		# x_max2 = torch.max(img_fusion)
-		# img_fusion = (img_fusion- x_min2) / (x_max2 - x_min2) * 255
-		# img_fusion = -img_fusion
-		if index < 10:
-			file_name = '0' + str(index) + '.png'
-		else:
-			file_name = str(index) + '.png'
-		output_path = output_path_root + file_name
-		output_count += 1
-		# save images
-		utils.save_image_test(img_fusion, output_path)
-		print(output_path)
+                # 转换为0-255的uint8
+                numpy_array = (numpy_array * 255).astype(np.uint8)
+
+                # 创建PIL图像
+                pil_image = Image.fromarray(numpy_array, mode=mode)
+
+                return pil_image
+
+            pil_image = tensor_to_pil(rgb_fused_image)
+            pil_image.save(output_path)
+            print(f"Saved: {output_path}")
+            # # 6. 创建 PIL 图像
+            # pil_image = transforms.ToPILImage()(rgb_fused_image)
+            # pil_image.save(output_path)
+            # print(f"Saved: {output_path}")
 
 
 def main():
+    # 运行demo
+    test_path = "images/test-RoadScene/"
+    network_type = 'SwinFuse'
+    fusion_type = ['l1_mean']
+    output_path = 'outputs/attention_avg/'
 
-	# run demo
-	test_path = "images/test-RoadScene/"
-	network_type = 'SwinFuse'
-	fusion_type = ['l1_mean']
+    # 确保输出目录存在
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
 
-	output_path = 'outputs/attention_avg/'
+    in_chans = 1
+    num_classes = in_chans
+    model_path = args.model_default
 
-	# in_c = 3 for RGB imgs; in_c = 1 for gray imgs
-	in_chans = 1
+    with torch.no_grad():
+        print('SSIM weight ----- ' + args.ssim_path[1])
+        ssim_weight_str = args.ssim_path[1]
+        f_type = fusion_type[0]
 
-	num_classes = in_chans
-	mode = 'L'
-	model_path = args.model_default
+        model1 = load_model1(model_path, num_classes)
+        model2 = load_model2(model_path, num_classes)
 
-	with torch.no_grad():
-		print('SSIM weight ----- ' + args.ssim_path[1])
-		ssim_weight_str = args.ssim_path[1]
-		f_type = fusion_type[0]
+        for i in range(362):
+            index = i + 1
+            infrared_path = test_path + 'IR' + str(index) + '.png'
+            visible_path = test_path + 'VIS' + str(index) + '.png'
 
-		model1 = load_model1(model_path, num_classes)
-		model2 = load_model2(model_path, num_classes)
+            run_demo(model1, model2, infrared_path, visible_path, output_path, index, f_type)
 
-		# input = torch.randn(1, 1, 256, 256)
-		# flops, params = profile(model2, inputs=(input,))
-		#
-		# print(f"FLOPs: {flops / 1e9:.4f} G")
-		# print(f"Params: {params / 1e6:.4f} M")
-
-		# begin = time.time()
-		# for a in range(10):
-		for i in range(362):
-			# for i in range(1000, 1221):
-			# for i in range(1000, 1040):
-			index = i + 1
-			infrared_path = test_path + 'IR' + str(index) + '.png'
-			visible_path = test_path + 'VIS' + str(index) + '.png'
-			# infrared_path = test_ir_path + 'roadscene' + '_' + str(index) + '.png'
-			# visible_path = test_vis_path + 'roadscene' + '_' + str(index) + '.png'
-			# infrared_path = test_ir_path + 'video' + '_' + str(index) + '.png'
-			# visible_path = test_vis_path + 'video' + '_' +str(index) + '.png'
-			run_demo(model1, model2, infrared_path, visible_path, output_path, index, f_type)
-	# end = time.time()
-	# print("consumption time of generating:%s " % (end - begin))
-	print('Done......')
-
+    print('Done......')
 
 
 if __name__ == '__main__':
-	main()
+    main()
