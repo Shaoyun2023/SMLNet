@@ -11,6 +11,50 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 
+def tensor_to_pil(tensor, mode='RGB'):
+    """
+    将torch张量转换为PIL图像
+    Args:
+        tensor: torch.Tensor, 形状应为 [C, H, W]
+        mode: PIL图像模式，如 'RGB', 'L' 等
+    Returns:
+        PIL.Image对象
+    """
+    # 确保张量在CPU上且是float类型
+    tensor = tensor.cpu().detach()
+
+    # 检查张量形状
+    if tensor.dim() != 3:
+        raise ValueError(f"输入张量应为3维 [C, H, W]，但得到的是 {tensor.shape}")
+
+    # 如果是Byte类型（0-255），转换为float（0-1）
+    if tensor.dtype == torch.uint8:
+        tensor = tensor.float() / 255.0
+
+    # 如果张量值范围不是0-1，进行归一化或clamp
+    if tensor.min() < 0 or tensor.max() > 1:
+        # 方法1：clamp到0-1范围
+        tensor = tensor.clamp(0, 1)
+        # 或者方法2：归一化到0-1范围
+        # tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
+
+    # 转换为numpy数组，并调整维度为 [H, W, C]
+    # 注意：PIL需要 [H, W, C] 格式
+    if tensor.shape[0] == 3:  # RGB图像
+        # 从 [C, H, W] 转换为 [H, W, C]
+        numpy_array = tensor.permute(1, 2, 0).numpy()
+    else:
+        # 对于单通道图像
+        numpy_array = tensor.squeeze(0).numpy()
+
+    # 转换为0-255的uint8
+    numpy_array = (numpy_array * 255).astype(np.uint8)
+
+    # 创建PIL图像
+    pil_image = Image.fromarray(numpy_array, mode=mode)
+
+    return pil_image
+
 def clamp(value, min=0., max=1.0):
     """
     将像素值强制约束在[0,1], 以免出现异常斑点
@@ -288,51 +332,6 @@ def run_demo(nest_model, SPD_model, infrared_path, visible_path, output_path_roo
             output_path = output_path_root + file_name
             output_count += 1
 
-
-
-            def tensor_to_pil(tensor, mode='RGB'):
-                """
-                将torch张量转换为PIL图像
-                Args:
-                    tensor: torch.Tensor, 形状应为 [C, H, W]
-                    mode: PIL图像模式，如 'RGB', 'L' 等
-                Returns:
-                    PIL.Image对象
-                """
-                # 确保张量在CPU上且是float类型
-                tensor = tensor.cpu().detach()
-
-                # 检查张量形状
-                if tensor.dim() != 3:
-                    raise ValueError(f"输入张量应为3维 [C, H, W]，但得到的是 {tensor.shape}")
-
-                # 如果是Byte类型（0-255），转换为float（0-1）
-                if tensor.dtype == torch.uint8:
-                    tensor = tensor.float() / 255.0
-
-                # 如果张量值范围不是0-1，进行归一化或clamp
-                if tensor.min() < 0 or tensor.max() > 1:
-                    # 方法1：clamp到0-1范围
-                    tensor = tensor.clamp(0, 1)
-                    # 或者方法2：归一化到0-1范围
-                    # tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min())
-
-                # 转换为numpy数组，并调整维度为 [H, W, C]
-                # 注意：PIL需要 [H, W, C] 格式
-                if tensor.shape[0] == 3:  # RGB图像
-                    # 从 [C, H, W] 转换为 [H, W, C]
-                    numpy_array = tensor.permute(1, 2, 0).numpy()
-                else:
-                    # 对于单通道图像
-                    numpy_array = tensor.squeeze(0).numpy()
-
-                # 转换为0-255的uint8
-                numpy_array = (numpy_array * 255).astype(np.uint8)
-
-                # 创建PIL图像
-                pil_image = Image.fromarray(numpy_array, mode=mode)
-
-                return pil_image
 
             pil_image = tensor_to_pil(rgb_fused_image)
             pil_image.save(output_path)
