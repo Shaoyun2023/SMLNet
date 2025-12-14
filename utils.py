@@ -231,6 +231,9 @@ def get_test_image1(paths, height=None, width=None, flag=False):
         w = image.shape[1]
         c = 0
 
+        if 1 * base_size > h or 1 * base_size > w:
+            c = 2
+            images = get_img_parts256h(image, h, w)
         if 1 * base_size == h and 1 * base_size == w:
             c = 4
             images = get_img_parts11(image, h, w)
@@ -264,7 +267,7 @@ def get_test_image1(paths, height=None, width=None, flag=False):
             images = get_img_parts6(image, h, w)
         if 0 * base_size < h < 1 * base_size and 2 * base_size < w < 3 * base_size:
             c = 3
-            images = get_img_parts7(image, h, w)
+            images = get_img_parts71(image, h, w)
         if h == 1 * base_size and 2 * base_size < w < 3 * base_size:
             c = 3
             images = get_img_parts8(image, h, w)
@@ -430,6 +433,8 @@ def get_test_image1(paths, height=None, width=None, flag=False):
             image = scipy_misc_imresize(image, [height, width], interp='nearest')
         print(image.shape)
         base_size = 256
+        viimage = image
+
         if image.ndim == 3:
             image = np.sum(image, axis=2)
         image = image.astype(np.float32)
@@ -439,6 +444,9 @@ def get_test_image1(paths, height=None, width=None, flag=False):
         w = image.shape[1]
         c = 0
 
+        # if 1 * base_size > h or 1 * base_size > w:
+        #     c = 3
+        #     images = get_img_parts256h(image, h, w)
         if 1 * base_size == h and 1 * base_size == w:
             c = 4
             images = get_img_parts11(image, h, w)
@@ -469,15 +477,15 @@ def get_test_image1(paths, height=None, width=None, flag=False):
             images = get_img_parts5(image, h, w)
         if 0 * base_size < h < 1 * base_size and 1 * base_size < w < 2 * base_size:
             c = 2
-            images = get_img_parts6(image, h, w)
+            images = get_img_parts61(image, h, w)
         if 0 * base_size < h < 1 * base_size and 2 * base_size < w < 3 * base_size:
             c = 3
-            images = get_img_parts7(image, h, w)
+            images = get_img_parts71(image, h, w)
         if h == 1 * base_size and 2 * base_size < w < 3 * base_size:
             c = 3
             images = get_img_parts8(image, h, w)
 
-    return images, h, w, c
+    return images, h, w, c, viimage
 
 def get_img_parts1(image, h, w):
     pad = nn.ConstantPad2d(padding=(0, 512-w, 0, 512-h), value=0)
@@ -497,6 +505,39 @@ def get_img_parts1(image, h, w):
     images.append(img2.float())
     images.append(img3.float())
     images.append(img4.float())
+    # image = torch.from_numpy(image).unsqueeze(0)
+    # images = []
+    # h_cen = int(np.floor(h / 2))
+    # w_cen = int(np.floor(w / 2))
+    # img1 = image[:, 0:h_cen + 3, 0: w_cen + 3]
+    # img1 = np.reshape(img1, [1, img1.shape[0], img1.shape[1], img1.shape[2]])
+    # img2 = image[:, 0:h_cen + 3, w_cen - 2: w]
+    # img2 = np.reshape(img2, [1, img2.shape[0], img2.shape[1], img2.shape[2]])
+    # img3 = image[:, h_cen - 2:h, 0: w_cen + 3]
+    # img3 = np.reshape(img3, [1, img3.shape[0], img3.shape[1], img3.shape[2]])
+    # img4 = image[:, h_cen - 2:h, w_cen - 2: w]
+    # img4 = np.reshape(img4, [1, img4.shape[0], img4.shape[1], img4.shape[2]])
+    # images.append(img1.float())
+    # images.append(img2.float())
+    # images.append(img3.float())
+    # images.append(img4.float())
+
+    return images
+
+def get_img_parts256h(image, h, w):
+    pad = nn.ConstantPad2d(padding=(0, 512-w, 0, 512-h), value=0)
+    image = torch.from_numpy(image)
+    image = pad(image)
+
+    images = []
+    img1 = image[0:256, 0: 256]
+    img1 = torch.reshape(img1, [1, 1, img1.shape[0], img1.shape[1]])
+    img2 = image[0:256, w-256: w]
+    img2 = torch.reshape(img2, [1, 1, img2.shape[0], img2.shape[1]])
+    images.append(img1.float())
+    images.append(img2.float())
+
+
     # image = torch.from_numpy(image).unsqueeze(0)
     # images = []
     # h_cen = int(np.floor(h / 2))
@@ -925,6 +966,19 @@ def get_img_parts6(image, h, w):
     images.append(img2.float())
     return images
 
+def get_img_parts61(image, h, w):
+    pad = nn.ConstantPad2d(padding=(0, 512-w, 0, 256-h), value=0)
+    image = torch.from_numpy(image)
+    image = pad(image)
+    images = []
+    img1 = image[0:256, 0: 256]
+    img1 = torch.reshape(img1, [1, 1, img1.shape[0], img1.shape[1]])
+    img2 = image[0:256, w-256: w]
+    img2 = torch.reshape(img2, [1, 1, img2.shape[0], img2.shape[1]])
+    images.append(img1.float())
+    images.append(img2.float())
+    return images
+
 
 def get_img_parts7(image, h, w):
     pad = nn.ConstantPad2d(padding=(0, 768-w, 0, 256-h), value=0)
@@ -941,6 +995,83 @@ def get_img_parts7(image, h, w):
     images.append(img2.float())
     images.append(img3.float())
     return images
+
+def get_img_parts71(image, h, w):
+    pad = nn.ConstantPad2d(padding=(0, 768-w, 0, 256-h), value=0)
+    image = torch.from_numpy(image)
+    image = pad(image)
+    images = []
+    img1 = image[0:256, 0: 256]
+    img1 = torch.reshape(img1, [1, 1, img1.shape[0], img1.shape[1]])
+    img2 = image[0:256, 256: 512]
+    img2 = torch.reshape(img2, [1, 1, img2.shape[0], img2.shape[1]])
+    img3 = image[0:256, w-256: w]
+    img3 = torch.reshape(img3, [1, 1, img3.shape[0], img3.shape[1]])
+    images.append(img1.float())
+    images.append(img2.float())
+    images.append(img3.float())
+    return images
+
+
+# def get_img_parts71(image, h, w):
+#     # 将numpy数组转换为PyTorch张量
+#     image = torch.from_numpy(image).float()
+#
+#     # 如果高度小于256，使用镜像填充而不是零填充
+#     if h < 256:
+#         # 计算需要填充的高度
+#         pad_h = 256 - h
+#
+#         # 使用镜像填充（反射填充）来扩展高度
+#         # 首先将图像转换为4D张量 [batch, channel, height, width]
+#         image_4d = image.unsqueeze(0).unsqueeze(0)
+#
+#         # 使用反射填充，只在底部填充
+#         pad = nn.ReflectionPad2d((0, 0, 0, pad_h))
+#         image_padded = pad(image_4d)
+#
+#         # 转换回2D
+#         image = image_padded.squeeze(0).squeeze(0)
+#
+#         # 更新高度值
+#         h = 256
+#
+#     # 确保宽度至少为768，如果不够则使用镜像填充
+#     if w < 768:
+#         pad_w = 768 - w
+#
+#         # 转换为4D张量
+#         image_4d = image.unsqueeze(0).unsqueeze(0)
+#
+#         # 使用反射填充，只在右侧填充
+#         pad = nn.ReflectionPad2d((0, pad_w, 0, 0))
+#         image_padded = pad(image_4d)
+#
+#         # 转换回2D
+#         image = image_padded.squeeze(0).squeeze(0)
+#         w = 768
+#
+#     images = []
+#
+#     # 提取三个256x256的图像块
+#     # 第一个块：左侧
+#     img1 = image[0:256, 0:256]
+#     img1 = img1.unsqueeze(0).unsqueeze(0)  # 形状变为 [1, 1, 256, 256]
+#
+#     # 第二个块：中间
+#     img2 = image[0:256, 256:512]
+#     img2 = img2.unsqueeze(0).unsqueeze(0)  # 形状变为 [1, 1, 256, 256]
+#
+#     # 第三个块：右侧
+#     img3 = image[0:256, w - 256:w]
+#     img3 = img3.unsqueeze(0).unsqueeze(0)  # 形状变为 [1, 1, 256, 256]
+#
+#     images.append(img1)
+#     images.append(img2)
+#     images.append(img3)
+#
+#     return images
+
 
 
 def get_img_parts8(image, h, w):
@@ -1550,6 +1681,34 @@ def recons_fusion_images6(img_lists, h, w):
         img_f_list.append(img_f)
     return img_f_list
 
+def recons_fusion_images61(img_lists, h, w):
+    img_f_list = []
+    ones_temp = torch.ones(1, 256, w).to(args.device)
+    for i in range(len(img_lists[0])):
+
+        img1 = img_lists[0][i]
+        img2 = img_lists[1][i]
+
+
+
+        img_f = torch.zeros(1, 256, w).to(args.device)
+        count = torch.zeros(1, 256, w).to(args.device)
+        print(img_f.size())
+
+        img_f[:, 0:256, 0: 256] += img1
+        count[:, 0:256, 0: 256] += ones_temp[:, 0:256, 0: 256]
+        img_f[:, 0:256, w-256: w] += img2
+        count[:, 0:256, w-256: w] += ones_temp[:, 0:256, w-256: w]
+
+        img_f = img_f / count
+
+        # img_g = img_f
+        # for i in range(6):
+        #     img_f[:, 0:h, 256 + i] = img_f[:, 0:h, 256 - i] = (img_g[:, 0:h, 256 + i] + img_g[:, 0:h, 256 - i]) / 2
+
+        img_f_list.append(img_f)
+    return img_f_list
+
 
 def recons_fusion_images7(img_lists, h, w):
     img_f_list = []
@@ -1579,6 +1738,34 @@ def recons_fusion_images7(img_lists, h, w):
         img_f_list.append(img_f)
     return img_f_list
 
+def recons_fusion_images71(img_lists, h, w):
+    img_f_list = []
+    ones_temp = torch.ones(1, 256, w).to(args.device)
+    for i in range(len(img_lists[0])):
+
+        img1 = img_lists[0][i]
+        img2 = img_lists[1][i]
+        img3 = img_lists[2][i]
+
+
+        img_f = torch.zeros(1, 256, w).to(args.device)
+        count = torch.zeros(1, 256, w).to(args.device)
+        print(img_f.size())
+
+        img_f[:, 0:256, 0: 256] += img1
+        count[:, 0:256, 0: 256] += ones_temp[:, 0:256, 0: 256]
+        img_f[:, 0:256, 256: 512] += img2
+        count[:, 0:256, 256: 512] += ones_temp[:, 0:256, 256: 512]
+        img_f[:, 0:256, w-256: w] += img3
+        count[:, 0:256, w-256: w] += ones_temp[:, 0:256, w-256: w]
+
+        # img_g = img_f
+        # for i in range(6):
+        #     img_f[:, 0:h, 256 + i] = img_f[:, 0:h, 256 - i] = (img_g[:, 0:h, 256 + i] + img_g[:, 0:h, 256 - i]) / 2
+        #     img_f[:, 0:h, 512 + i] = img_f[:, 0:h, 512 - i] = (img_g[:, 0:h, 512 + i] + img_g[:, 0:h, 512 - i]) / 2
+        img_f = img_f / count
+        img_f_list.append(img_f)
+    return img_f_list
 
 def recons_fusion_images8(img_lists, h, w):
     img_f_list = []
