@@ -58,7 +58,9 @@ If you are interested in our work, please cite it in the following format:
   title={SMLNet: A SPD Manifold Learning Network for Infrared and Visible Image Fusion},
   author={Kang, Huan and Li, Hui and Xu, Tianyang and Wu, Xiao-Jun and Wang, Rui and Cheng, Chunyang and Kittler, Josef},
   journal={International Journal of Computer Vision},
-  pages={1--22},
+  volume={133},
+  number={12},
+  pages={8642--8663},
   year={2025},
   publisher={Springer}
 }
