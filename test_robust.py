@@ -181,10 +181,10 @@ def run_demo(nest_model, SPD_model, infrared_path, visible_path, output_path_roo
 
 
 def main():
-    test_path = "images/test-MSRS/"
+    test_path = "images/test_VOT-RGBT/"
     network_type = 'SwinFuse'
     fusion_type = ['l1_mean']
-    output_path = 'outputs/MSRS/'
+    output_path = 'outputs/VOT-RGBT/'
 
     if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -201,10 +201,12 @@ def main():
         model1 = load_model1(model_path, num_classes)
         model2 = load_model2(model_path, num_classes)
 
-        for i in range(362):
+        for i in range(999):
             index = i + 1
-            infrared_path = test_path + 'IR' + str(index) + '.png'
-            visible_path = test_path + 'VIS' + str(index) + '.png'
+
+
+            infrared_path = os.path.join(test_path, 'ir', f"{index:02d}.png")
+            visible_path = os.path.join(test_path, 'vi', f"{index:02d}.png")
 
             run_demo(model1, model2, infrared_path, visible_path, output_path, index, f_type)
 

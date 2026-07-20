@@ -315,15 +315,6 @@ def run_demo(nest_model, SPD_model, infrared_path, visible_path, output_path_roo
             rgb_fused_image = YCrCb2RGB(Y_fused_resized, Cb_vi, Cr_vi)
 
 
-            # image = torch.sum(rgb_fused_image, dim=0, keepdim=True)
-            #
-            # image = image.squeeze().detach().cpu().numpy()
-            #
-            # image = (image - image.min()) / (image.max() - image.min())
-            # plt.imshow(image, cmap='gray')
-            # plt.axis('off')
-            # plt.show()
-
             # 保存图像
             if index < 10:
                 file_name = '0' + str(index) + '.png'
@@ -344,10 +335,10 @@ def run_demo(nest_model, SPD_model, infrared_path, visible_path, output_path_roo
 
 def main():
     # 运行demo
-    test_path = "images/test-RoadScene/"
+    test_path = "images/test-TNO40/"
     network_type = 'SwinFuse'
     fusion_type = ['l1_mean']
-    output_path = 'outputs/attention_avg/'
+    output_path = 'outputs/TNO/'
 
     # 确保输出目录存在
     if not os.path.exists(output_path):
@@ -367,8 +358,8 @@ def main():
 
         for i in range(362):
             index = i + 1
-            infrared_path = test_path + 'IR' + str(index) + '.png'
-            visible_path = test_path + 'VIS' + str(index) + '.png'
+            infrared_path = os.path.join(test_path, 'ir', f"{index:02d}.png")
+            visible_path = os.path.join(test_path, 'vi', f"{index:02d}.png")
 
             run_demo(model1, model2, infrared_path, visible_path, output_path, index, f_type)
 
